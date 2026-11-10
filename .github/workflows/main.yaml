@@ -1,8 +1,5 @@
 name: Build and Release
 
-env:
-  RELEASE: 5.0.0.43
-
 on:
   push:
     tags:
@@ -16,6 +13,7 @@ jobs:
 
     strategy:
       matrix:
+        release: [5.0.0.43, 5.1.0.11]
         arch: [aarch64, armv7hl, i486]
     steps:
     - uses: actions/checkout@v6
@@ -72,16 +70,16 @@ jobs:
         EOF
       shell: bash
 
-    - name: Build ${{ matrix.arch }} on ${{ env.RELEASE }}
+    - name: Build ${{ matrix.arch }} on ${{ matrix.release }}
       uses: ./.github/actions/sfos-build
       with:
-        release: ${{ env.RELEASE }}
+        release: ${{ matrix.release }}
         arch: ${{ matrix.arch }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v7
       with:
-        name: build-${{ matrix.arch }}-SailfishOS-${{ env.RELEASE }}
+        name: build-${{ matrix.arch }}-SailfishOS-${{ matrix.release }}
         path: RPMS/
 
   release:
@@ -92,6 +90,9 @@ jobs:
     permissions:
       contents: write
 
+    strategy:
+      matrix:
+        release: [{build: 5.0.0.43, variant: 1}, {build: 5.1.0.11, variant: 2}]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -102,18 +103,20 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: tg_owt
-        pattern: build-*
+        pattern: build-*-SailfishOS-${{ matrix.release.build }}
         merge-multiple: true
 
     - name: Create release
       run: |
         set -x
 
+        FILE_NAME=tg_owt.${{ matrix.release.variant }}.zip
         cd tg_owt
-        zip -r ../tg_owt.zip .
+        zip -r ../$FILE_NAME .
         cd ..
 
         tag_name="${GITHUB_REF##*/}"
-        gh release create "$tag_name" tg_owt.zip
+        gh release create "$tag_name" 2>/dev/null || true
+        gh release upload "$tag_name" "$FILE_NAME"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
